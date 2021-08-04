@@ -190,9 +190,16 @@ getForemostWindowIdOnDesktop(n)
 }
 
 MoveCurrentWindowToDesktop(desktopNumber) {
+    global CurrentDesktop
     WinGet, activeHwnd, ID, A
     DllCall(MoveWindowToDesktopNumberProc, UInt, activeHwnd, UInt, desktopNumber - 1)
-    switchDesktopByNumber(desktopNumber)
+
+    ; Change original behavior (do not change desktop after moving window)
+    ; switchDesktopByNumber(desktopNumber)
+
+    ; Instead focus foremost window on current desktop
+    focusTheForemostWindow(CurrentDesktop)
+    
 }
 
 MoveCurrentWindowToRightDesktop()
