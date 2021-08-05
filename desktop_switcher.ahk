@@ -13,6 +13,10 @@ LastOpenedDesktop := 1
 hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", A_ScriptDir . "\VirtualDesktopAccessor.dll", "Ptr")
 global IsWindowOnDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsWindowOnDesktopNumber", "Ptr")
 global MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "MoveWindowToDesktopNumber", "Ptr")
+global IsPinnedWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "IsPinnedWindow", "Ptr")
+global PinWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "PinWindow", "Ptr")
+global UnPinWindowProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "UnPinWindow", "Ptr")
+global GoToDesktopNumberProc := DllCall("GetProcAddress", Ptr, hVirtualDesktopAccessor, AStr, "GoToDesktopNumber", "Ptr")
 
 ; Main
 SetKeyDelay, 75
@@ -96,6 +100,10 @@ _switchDesktopToTarget(targetDesktop)
     ; Globals variables should have been updated via updateGlobalVariables() prior to entering this function
     global CurrentDesktop, DesktopCount, LastOpenedDesktop
 
+    ; Check if current window is pinned
+    WinGet, activeHwnd, ID, A
+    isPinned := DllCall(IsPinnedWindowProc, UInt, activeHwnd)
+
     ; Don't attempt to switch to an invalid desktop
     if (targetDesktop > DesktopCount || targetDesktop < 1 || targetDesktop == CurrentDesktop) {
         OutputDebug, [invalid] target: %targetDesktop% current: %CurrentDesktop%
@@ -103,27 +111,37 @@ _switchDesktopToTarget(targetDesktop)
     }
 
     LastOpenedDesktop := CurrentDesktop
-
-    ; Fixes the issue of active windows in intermediate desktops capturing the switch shortcut and therefore delaying or stopping the switching sequence. This also fixes the flashing window button after switching in the taskbar. More info: https://github.com/pmb6tz/windows-desktop-switcher/pull/19
-    WinActivate, ahk_class Shell_TrayWnd
-
-    ; Go right until we reach the desktop we want
-    while(CurrentDesktop < targetDesktop) {
-        Send {LWin down}{LCtrl down}{Right down}{LWin up}{LCtrl up}{Right up}
-        CurrentDesktop++
-        OutputDebug, [right] target: %targetDesktop% current: %CurrentDesktop%
+    ; If current window is pinned, fall back to built-in DLL function instead
+    ; Yes, that's the only way I found that didn't make windows flash and still maintained expected results
+    if (isPinned == 1) {
+        CurrentDesktop := targetDesktop
+        DllCall(GoToDesktopNumberProc, Int, targetDesktop)
     }
+    ; Otherwise use standard method
+    else {
+        ; Fixes the issue of active windows in intermediate desktops capturing the switch shortcut and therefore delaying or stopping the switching sequence. This also fixes the flashing window button after switching in the taskbar. More info: https://github.com/pmb6tz/windows-desktop-switcher/pull/19
 
-    ; Go left until we reach the desktop we want
-    while(CurrentDesktop > targetDesktop) {
-        Send {LWin down}{LCtrl down}{Left down}{Lwin up}{LCtrl up}{Left up}
-        CurrentDesktop--
-        OutputDebug, [left] target: %targetDesktop% current: %CurrentDesktop%
+
+        WinActivate, ahk_class Shell_TrayWnd
+
+        ; Go right until we reach the desktop we want
+        while(CurrentDesktop < targetDesktop) {
+            Send {LWin down}{LCtrl down}{Right down}{LWin up}{LCtrl up}{Right up}
+            CurrentDesktop++
+            OutputDebug, [right] target: %targetDesktop% current: %CurrentDesktop%
+        }
+
+        ; Go left until we reach the desktop we want
+        while(CurrentDesktop > targetDesktop) {
+            Send {LWin down}{LCtrl down}{Left down}{Lwin up}{LCtrl up}{Left up}
+            CurrentDesktop--
+            OutputDebug, [left] target: %targetDesktop% current: %CurrentDesktop%
+        }
+
+        ; Makes the WinActivate fix less intrusive
+        Sleep, 50
+        focusTheForemostWindow(targetDesktop) 
     }
-
-    ; Makes the WinActivate fix less intrusive
-    Sleep, 50
-    focusTheForemostWindow(targetDesktop)
 }
 
 updateGlobalVariables()
@@ -245,4 +263,17 @@ deleteVirtualDesktop()
     DesktopCount--
     CurrentDesktop--
     OutputDebug, [delete] desktops: %DesktopCount% current: %CurrentDesktop%
+}
+
+pinActiveWindowToAllDesktops()
+{
+    WinGet, activeHwnd, ID, A
+    isPinned := DllCall(IsPinnedWindowProc, UInt, activeHwnd)
+
+    if (isPinned == 0) {
+        DllCall(PinWindowProc, UInt, activeHwnd)
+    }
+    else {
+        DllCall(UnPinWindowProc, UInt, activeHwnd)
+    }
 }
