@@ -111,32 +111,18 @@ _switchDesktopToTarget(targetDesktop)
     }
 
     LastOpenedDesktop := CurrentDesktop
-    ; If current window is pinned, fall back to built-in DLL function instead
-    ; Yes, that's the only way I found that didn't make windows flash and still maintained expected results
+    ; If current window is pinned, skip whole voodoo described below
     if (isPinned == 1) {
         CurrentDesktop := targetDesktop
-        DllCall(GoToDesktopNumberProc, Int, targetDesktop)
+        DllCall(GoToDesktopNumberProc, Int, targetDesktop-1)
     }
-    ; Otherwise use standard method
+    ; Otherwise use voodoo fix method
     else {
         ; Fixes the issue of active windows in intermediate desktops capturing the switch shortcut and therefore delaying or stopping the switching sequence. This also fixes the flashing window button after switching in the taskbar. More info: https://github.com/pmb6tz/windows-desktop-switcher/pull/19
 
-
         WinActivate, ahk_class Shell_TrayWnd
-
-        ; Go right until we reach the desktop we want
-        while(CurrentDesktop < targetDesktop) {
-            Send {LWin down}{LCtrl down}{Right down}{LWin up}{LCtrl up}{Right up}
-            CurrentDesktop++
-            OutputDebug, [right] target: %targetDesktop% current: %CurrentDesktop%
-        }
-
-        ; Go left until we reach the desktop we want
-        while(CurrentDesktop > targetDesktop) {
-            Send {LWin down}{LCtrl down}{Left down}{Lwin up}{LCtrl up}{Left up}
-            CurrentDesktop--
-            OutputDebug, [left] target: %targetDesktop% current: %CurrentDesktop%
-        }
+        CurrentDesktop := targetDesktop
+        DllCall(GoToDesktopNumberProc, Int, targetDesktop-1)
 
         ; Makes the WinActivate fix less intrusive
         Sleep, 50
